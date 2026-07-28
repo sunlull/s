@@ -1,0 +1,197 @@
+<view class="page-shell">
+  <view class="hero">
+    <view class="eyebrow">PERLER PATTERN · MVP</view>
+    <view class="hero-title">把图片变成可制作的拼豆图纸</view>
+    <view class="hero-subtitle">149色 MARD 小豆参考板 · 本地处理 · 每格纯色与色号</view>
+  </view>
+
+  <view class="card source-card">
+    <view class="section-title">1. 选择图片</view>
+    <view class="section-note">建议使用主体清晰、背景简单、光线均匀的图片。</view>
+    <button class="primary-button" bindtap="chooseImage">
+      {{selectedImage ? "重新选择图片" : "从相册或相机选择"}}
+    </button>
+    <view wx:if="{{selectedImage}}" class="preview-wrap">
+      <image class="source-preview" src="{{selectedImage}}" mode="aspectFit"></image>
+      <view class="image-meta">原图 {{originalSizeText}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">2. 设置图纸</view>
+
+    <view class="setting-block">
+      <view class="setting-row">
+        <text>横向格数</text>
+        <text class="setting-value">{{gridWidth}}</text>
+      </view>
+      <slider min="8" max="64" step="1" value="{{gridWidth}}" activeColor="#1f7a78" bindchange="onGridWidthChange"></slider>
+    </view>
+
+    <view class="setting-block">
+      <view class="setting-row">
+        <text>纵向格数</text>
+        <text class="setting-value">{{gridHeight}}</text>
+      </view>
+      <slider min="8" max="64" step="1" value="{{gridHeight}}" activeColor="#1f7a78" bindchange="onGridHeightChange"></slider>
+    </view>
+
+    <view class="setting-block">
+      <view class="setting-row">
+        <text>最多使用颜色</text>
+        <text class="setting-value">{{maxColors}}</text>
+      </view>
+      <slider min="8" max="48" step="1" value="{{maxColors}}" activeColor="#1f7a78" bindchange="onMaxColorsChange"></slider>
+    </view>
+
+    <view class="setting-block">
+      <view class="setting-label">采样模式</view>
+      <radio-group class="mode-group" bindchange="onSampleModeChange">
+        <label class="mode-option">
+          <radio value="photo" checked="{{sampleMode === 'photo'}}" color="#1f7a78"></radio>
+          <view>
+            <view>照片</view>
+            <view class="mode-note">平滑缩放，适合人像和实拍</view>
+          </view>
+        </label>
+        <label class="mode-option">
+          <radio value="pixel" checked="{{sampleMode === 'pixel'}}" color="#1f7a78"></radio>
+          <view>
+            <view>像素图</view>
+            <view class="mode-note">关闭平滑，保留硬边</view>
+          </view>
+        </label>
+      </radio-group>
+    </view>
+
+    <button class="generate-button" loading="{{generating}}" disabled="{{generating}}" bindtap="generatePattern">
+      {{generating ? "正在匹配颜色…" : "生成拼豆图纸"}}
+    </button>
+  </view>
+
+  <view wx:if="{{hasPattern}}" class="card pattern-card">
+    <view class="pattern-head">
+      <view>
+        <view class="section-title">3. 检查并修改</view>
+        <view class="section-note">点击任意格可改色或设为空白；每5格有加粗线。</view>
+      </view>
+      <view class="pattern-stats">{{gridWidth}} × {{gridHeight}}</view>
+    </view>
+
+    <view class="brand-picker-row">
+      <text>显示色号</text>
+      <picker mode="selector" range="{{brandOptions}}" value="{{brandIndex}}" bindchange="onBrandChange">
+        <view class="picker-box">{{brandOptions[brandIndex]}}⌄</view>
+      </picker>
+    </view>
+
+    <view wx:if="{{brandIndex !== 0}}" class="warning-strip">
+      当前只是参考换号，格子颜色仍按 MARD 屏幕色值匹配；“—”表示该行没有对应品牌色号。
+    </view>
+
+    <view class="preview-toolbar">
+      <view>
+        <view class="preview-toolbar-title">图纸预览</view>
+        <view class="preview-toolbar-note">{{zoomPercent}}% · 拖动查看</view>
+      </view>
+      <view class="zoom-actions">
+        <button class="zoom-button" disabled="{{!canZoomOut}}" bindtap="zoomOut">−</button>
+        <button class="fit-button" bindtap="fitPatternWidth">整图</button>
+        <button class="zoom-button" disabled="{{!canZoomIn}}" bindtap="zoomIn">＋</button>
+      </view>
+    </view>
+
+    <view id="canvasViewport" class="canvas-viewport">
+      <scroll-view
+        class="canvas-scroll"
+        scroll-x="{{true}}"
+        scroll-y="{{true}}"
+        enhanced="{{true}}"
+        show-scrollbar="{{true}}"
+      >
+        <canvas
+          type="2d"
+          id="patternCanvas"
+          class="pattern-canvas"
+          style="width: {{canvasCssWidth}}px; height: {{canvasCssHeight}}px;"
+          bindtap="onPatternTap"
+        ></canvas>
+      </scroll-view>
+    </view>
+    <view wx:if="{{compactPreview}}" class="compact-tip">
+      当前为整图预览；放大到 52% 以上可显示格内色号。
+    </view>
+
+    <button class="export-button" bindtap="exportPattern">导出带色号 PNG</button>
+  </view>
+
+  <view wx:if="{{hasPattern}}" class="card material-card">
+    <view class="material-head">
+      <view>
+        <view class="section-title">4. 材料清单</view>
+        <view class="section-note">共 {{materialTotal}} 颗，使用 {{usedColorCount}} 种颜色。</view>
+      </view>
+      <view class="brand-badge">{{selectedBrand}}</view>
+    </view>
+
+    <view class="material-list">
+      <view class="material-item" wx:for="{{materials}}" wx:key="paletteIndex">
+        <view class="swatch" style="background: {{item.hex}};"></view>
+        <view class="material-main">
+          <view class="material-code {{item.hasEquivalent ? '' : 'missing-code'}}">
+            {{item.displayCode}}
+          </view>
+          <view class="material-sub">MARD {{item.mardCode}} · {{item.hex}}</view>
+        </view>
+        <view class="material-count">
+          <view>× {{item.count}}</view>
+          <view class="material-percent">{{item.percent}}%</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="data-note">
+    <view class="data-note-title">色卡说明</view>
+    <view>{{paletteNote}}</view>
+  </view>
+
+  <canvas type="2d" id="sourceCanvas" class="offscreen-canvas"></canvas>
+  <canvas type="2d" id="exportCanvas" class="offscreen-canvas"></canvas>
+
+  <view wx:if="{{pickerVisible}}" class="modal-mask" bindtap="closePicker">
+    <view class="color-sheet" catchtap="noop">
+      <view class="sheet-handle"></view>
+      <view class="sheet-head">
+        <view>
+          <view class="sheet-title">{{pickerTitle}}</view>
+          <view class="sheet-subtitle">{{selectedCellText}}</view>
+        </view>
+        <button class="sheet-close" bindtap="closePicker">×</button>
+      </view>
+      <input
+        class="color-search"
+        placeholder="搜索 MARD 或当前品牌色号"
+        value="{{pickerSearch}}"
+        bindinput="onPickerSearch"
+      />
+      <view class="sheet-actions">
+        <button class="clear-button" bindtap="clearSelectedCell">设为空白格</button>
+      </view>
+      <scroll-view class="color-list" scroll-y="{{true}}">
+        <view
+          class="color-option"
+          wx:for="{{filteredColors}}"
+          wx:key="index"
+          data-index="{{item.index}}"
+          bindtap="choosePickerColor"
+        >
+          <view class="color-option-swatch" style="background: {{item.hex}};"></view>
+          <view class="color-option-code">MARD {{item.code}}</view>
+          <view class="color-option-target">{{selectedBrand}} {{item.targetCode}}</view>
+        </view>
+        <view wx:if="{{filteredColors.length === 0}}" class="empty-search">没有匹配色号</view>
+      </scroll-view>
+    </view>
+  </view>
+</view>
